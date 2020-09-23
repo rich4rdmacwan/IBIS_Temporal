@@ -1,3 +1,4 @@
+Forked to add functionality for spatial rppg analysis
 # IBIS_Temporal
 Temporal propagation for IBIS superpixels.
 The signal processing implementation done in this code along with the visualisation tools are only provided for test purpose for users. The signal processing implementation is far from optimized and can't run the code with real time constraint in that state. Futhermore, the results obtained in the CVPM publication refers to results obtained with an offline signal processing step done in Matlab.
