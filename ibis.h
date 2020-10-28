@@ -146,7 +146,7 @@ private:
     };
 
     // input parameters
-    int size;
+    int size; // size of the video frame in pixels
     int width;
     int height;
 

@@ -139,7 +139,7 @@ void write_traces(float* C1, float* C2, float* C3, const std::string& output_lab
     file.close();
 }
 
-void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signal, cv::Mat* img, std::string output_basename, int frame_index ) {
+void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signal, cv::Mat* img, std::string output_basename, int frame_index, int nframes = 0 ) {
 
     int width = img->cols;
     int height = img->rows;
@@ -236,7 +236,7 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     Signal->process();
 #endif
     if( frame_index % 30 == 0 ) {
-        printf("-frame\t%i\n", frame_index);
+        printf("-frame\t%i/%d\n", frame_index, nframes);
 
     }
 
@@ -315,13 +315,15 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
 #if SAVE_output
     char output_labels[255] = {0};
     sprintf(output_labels, "results/%s/traces_%04i.seg", output_basename.c_str(), frame_index);
+    
     write_traces( R, G, B, output_labels, Super_Pixel );
 
     sprintf(output_labels, "results/%s/parent_%04i.seg", output_basename.c_str(), frame_index);
 
     std::ofstream file;
     file.open(output_labels);
-    int* parent = Super_Pixel->get_inheritance();
+   
+     int* parent = Super_Pixel->get_inheritance();
 
     for (int y=0; y<Super_Pixel->getActualSPNumber(); y++)
         file << parent[y] << std::endl;
@@ -450,9 +452,10 @@ int main( int argc, char* argv[] )
 
         }
 #endif
-
+        int nframes = int(video.get(cv::CAP_PROP_FRAME_COUNT));
+        printf("Nframes = %d\n",nframes);
         while( video.read( img ) ) {
-            execute_IBIS( K, compa, &Super_Pixel, &Signal, &img, output_basename, ii );
+            execute_IBIS( K, compa, &Super_Pixel, &Signal, &img, output_basename, ii, nframes );
             ii++;
 
         }

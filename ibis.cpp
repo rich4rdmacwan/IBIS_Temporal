@@ -6,7 +6,15 @@
  */
 
 #include "ibis.h"
-
+void printArray(int* numPtr, int x)
+{
+   std::cout<<"[ ";
+   for (int z = 0; z < x; z++)
+   {
+      std::cout << numPtr[z] << "  ";
+   }
+   std::cout<<"]"<<std::endl;
+}
 IBIS::IBIS(int _maxSPNum, int _compacity ) {
     labels = nullptr;
     maxSPNumber = _maxSPNum;
@@ -354,7 +362,8 @@ void IBIS::init() {
         index_mask++;
     index_mask--;
 
-    // set mask size
+    // set mask size => bloc size, 3x3, 5x5, 9x9, etc. tao_i=2^(alpha-i+1)+1
+    //k = alpha-i, iterating from 0. alpha+1 is the number of iterations.
     mask_size = new int[ index_mask ];
     for( int k=0; k<index_mask; k++ )
         mask_size[ k ] = pow( 2.0, k+1 ) + 1;
@@ -370,7 +379,8 @@ void IBIS::init() {
     processed = new int[ size ];
     std::fill( processed, processed + size, 0 );
 
-    // precalculate vertical indexes
+    // precalculate vertical indexes: indexes of first column: 0, 640, 1280,1920,etc.
+    // the pixels are stored in row major format.
     vertical_index = new int[ height + mask_size[ index_mask - 1 ] ];
     for( int k=0; k < height + mask_size[ index_mask - 1 ]; k++ ) {
         vertical_index[ k ] = k*width;
@@ -386,7 +396,7 @@ void IBIS::init() {
     y_limit = height + mask_size[ index_mask-1 ];
     x_limit = width + mask_size[ index_mask-1 ];
 
-    // create MASKs
+    // create MASKs: initially, blocks of size 33
     step = mask_size[ index_mask-1 ];
     ii=0;
     int col_count = 0;
@@ -404,23 +414,29 @@ void IBIS::init() {
     }
 
     count_mask = ii;
+    //create <count_mask> MASK objects
     mask_buffer = new MASK[ count_mask ];
     for( int y=start_xy, yy=0; y<y_limit; y+=step, yy++ ) {
         for( int x=start_xy, xx=0; x<x_limit; x+=step, xx++ ) {
             int adjacent[9] = {-1};
-            ii = yy*col_count + xx;
+            ii = yy*col_count + xx; //super pixel absolute index 0-count_mask
 
             int jj=0;
+
             for( int i=-1; i<=1; i++ ) {
+                std::cout<<ii<<"  "<<x<<","<<y<<":[ ";
                 for( int j=-1; j<=1; j++ ) {
                     int pot = ii + i*col_count + j;
+                    std::cout<<pot<<" ";
                     adjacent[ jj ] =  ( !( yy + i < 0 || yy + i >= row_count || xx + j < 0 || xx + j >= col_count ) ) ? pot : -1;
+
                     jj++;
 
                 }
-
+                std::cout<<"]"<<std::endl;
             }
-
+            std::cout<<"-----------"<<std::endl;
+            //printArray(adjacent, 9);
             mask_buffer[ ii ].init( pow(2.0, index_mask+1), y, x, index_mask-1, this, adjacent );
 
         }
@@ -1664,3 +1680,5 @@ bool IBIS::MASK::angular_assign() {
     return output;
 
 }
+
+
