@@ -415,6 +415,7 @@ void IBIS::init() {
 
     count_mask = ii;
     //create <count_mask> MASK objects
+    //Explanation of the block configuration here: https://github.com/rich4rdmacwan/IBIS_Temporal/raw/master/Code_init_blocks.pdf
     mask_buffer = new MASK[ count_mask ];
     for( int y=start_xy, yy=0; y<y_limit; y+=step, yy++ ) {
         for( int x=start_xy, xx=0; x<x_limit; x+=step, xx++ ) {
