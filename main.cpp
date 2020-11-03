@@ -315,7 +315,7 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
 #if SAVE_output
     char output_labels[255] = {0};
     sprintf(output_labels, "results/%s/traces_%04i.seg", output_basename.c_str(), frame_index);
-    
+
     write_traces( R, G, B, output_labels, Super_Pixel );
 
     sprintf(output_labels, "results/%s/parent_%04i.seg", output_basename.c_str(), frame_index);

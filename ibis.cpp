@@ -6,12 +6,15 @@
  */
 
 #include "ibis.h"
-void printArray(int* numPtr, int x)
+template<typename T=int>
+void printArray(T* numPtr, int x)
 {
    std::cout<<"[ ";
    for (int z = 0; z < x; z++)
    {
-      std::cout << numPtr[z] << "  ";
+      //std::cout << (numPtr[z]>1e10?-1:(numPtr[z]<1e-10)?0:numPtr[z]) << "  ";
+       if (numPtr[z]>1e10 || numPtr[z]<1e-10) std::cout << -1<<" ";
+       else std::cout << numPtr[z] << "  ";
    }
    std::cout<<"]"<<std::endl;
 }
@@ -124,9 +127,10 @@ void IBIS::initSeeds() {
     int x, y;
     int xe, ye, xe_1, ye_1;
     int start_y, final_y, start_x, final_x;
-    int* tmp_adjacent_sp = new int[size_roi*maxSPNumber];
-    int* tmp_count_adjacent = new int[maxSPNumber];
+    int* tmp_adjacent_sp = new int[size_roi*maxSPNumber]; //Initially 9 adjacent SPs for each SP
+    int* tmp_count_adjacent = new int[maxSPNumber]; //Number of (actual?) adjacent SPs for each SP
 
+    //SPTypicalLength: average initial size of superpixels, width=height
     xstrips = width / SPTypicalLength;
     ystrips = height / SPTypicalLength;
 
@@ -140,6 +144,8 @@ void IBIS::initSeeds() {
     yoff = SPTypicalLength / 2;
 
     n = 0;
+    //The following logic is to find the x,y positions (bottom right, i think) of the seeds
+    //seedx,seedy
     for (y = 0; y < ystrips; y++)
     {
         ye = (int)(y*yerrperstrip);
@@ -179,17 +185,21 @@ void IBIS::initSeeds() {
 
             Xseeds_init[n] = (float) seedx;
             Yseeds_init[n] = (float) seedy;
+            //std::cout<<"Xseeds_init: ";
+            //printArray<float>(Xseeds_init,n+1);
 
-            // fill line by line
+            // fill line by line, assign pixels corresponding to this block to this block
             for( int index_y=start_y; index_y<=final_y; index_y++ ) {
                 std::fill( initial_repartition + index_y*width + start_x, initial_repartition + index_y*width + final_x, n );
 
             }
 
             // list adjacents seeds
+            //Populate the tmp adjacent (surrounding SPs) for each SP
             tmp_count_adjacent[n] = 0;
+            //For size_roi=9, -1,0,1. For size_roi=25, -2,-1,0,1,2. Basically, the surrounding sqrt(size_roi) kernel
             for( int roi_y=-(sqrt(size_roi) - 1)/2; roi_y <= (sqrt(size_roi) - 1)/2; roi_y++ ) {
-                for( int roi_x=-(sqrt(size_roi) - 1)/2; roi_x <= (sqrt(size_roi) - 1)/2; roi_x++ ) {
+                for( int roi_x=-(sqrt(size_roi) - 1)/2; roi_x <= (sqrt(size_roi) - 1)/2; roi_x++ ) {//-1,0,1
                     if( !( y + roi_y < 0 || y + roi_y >= ystrips || x + roi_x < 0 || x + roi_x >= xstrips ) ) {
                         tmp_adjacent_sp[size_roi*n+tmp_count_adjacent[n]] = n + roi_y*xstrips + roi_x;
                         tmp_count_adjacent[n]++;
@@ -199,12 +209,13 @@ void IBIS::initSeeds() {
                 }
 
             }
-
-            n++;
+            //printArray(tmp_count_adjacent,maxSPNumber);
+            n++; //n is the number of SPs
         }
     }
     SPNumber = n;
 
+    //Second pass to estimate adjacent SPs, I think it has to do with properly arranging in the array.
     for(int i=0; i<SPNumber; i++) {
         count_adjacent[i] = 0;
 
@@ -425,18 +436,18 @@ void IBIS::init() {
             int jj=0;
 
             for( int i=-1; i<=1; i++ ) {
-                std::cout<<ii<<"  "<<x<<","<<y<<":[ ";
+                //std::cout<<ii<<"  "<<x<<","<<y<<":[ ";
                 for( int j=-1; j<=1; j++ ) {
                     int pot = ii + i*col_count + j;
-                    std::cout<<pot<<" ";
+                    //std::cout<<pot<<" ";
                     adjacent[ jj ] =  ( !( yy + i < 0 || yy + i >= row_count || xx + j < 0 || xx + j >= col_count ) ) ? pot : -1;
 
                     jj++;
 
                 }
-                std::cout<<"]"<<std::endl;
+                //std::cout<<"]"<<std::endl;
             }
-            std::cout<<"-----------"<<std::endl;
+           // std::cout<<"-----------"<<std::endl;
             //printArray(adjacent, 9);
             mask_buffer[ ii ].init( pow(2.0, index_mask+1), y, x, index_mask-1, this, adjacent );
 
