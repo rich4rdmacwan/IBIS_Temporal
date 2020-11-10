@@ -1,6 +1,6 @@
 #include "signal_processing.h"
 
-#define VISU_SIGNAL_FINAL 1
+#define VISU_SIGNAL_FINAL 0
 
 Signal_processing::Signal_processing( int MaxSP, int size_signal)
 {

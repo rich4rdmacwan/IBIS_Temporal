@@ -17,16 +17,44 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <signal.h>
 #include "utils.h"
 #include "signal_processing.h"
 
 #define SAVE_output         1
-#define visu                1
-#define visu_SNR	    	1
+#define visu                0
+#define visu_SNR	    	0
 #define signal_size         300
 #define signal_processing   1
-
+// Handle to labelsfile. Shall be kept open to write labels for each frame.
+// Shall be closed during destruction
+std::ofstream labelsfile;
+std::string output_basename;
 using namespace std;
+//Declaration
+void write_contours_composite(unsigned char* data,int size, const std::string& output_labels, bool finalize=false);
+void write_labels(cv::Mat lblImg, const std::string& output_labels, bool finalize=false);
+
+cv::VideoWriter lblsVidWriter;
+int fourcc = cv::VideoWriter::fourcc('Y','8','0','0');
+
+double fps = 30; //Not going to matter because we're just going to extract the frames
+
+
+// Define the function to be called when ctrl-c (SIGINT) is sent to process
+void signal_callback_handler(int signum) {
+   cout << "Caught signal " << signum << endl;
+   //Close labelsfile
+   char output_labels[255] = {0};
+   sprintf(output_labels, "results/%s/labels.seg", output_basename.c_str());
+   write_contours_composite(0,0,output_labels,true);
+   cv::Mat dummy;
+   write_labels(dummy,0,true);
+   // Terminate program
+   exit(signum);
+}
+
+
 //=================================================================================
 /// DrawContoursAroundSegments
 ///
@@ -101,6 +129,56 @@ void DrawContoursAroundSegments(
     }
 }
 
+//Save all the frame contours to a single file.
+//To save disk space, this writes just the indices of the pixel positions representing the contours
+//Column major format: 640x480 elements separated by spaces, followed by a ',' to separate frames.
+// frame1              ; frame2              ;...;frameN
+// col1' col2' ... col480'; col1' col2' ... col480';...
+void write_contours_composite(unsigned char* data,int size, const std::string& output_labels, bool finalize)
+{
+    //This should be called from the destructor, or at the end of all the frames
+    if(finalize){labelsfile.close();}
+    else{
+        if(!labelsfile.is_open()){ labelsfile.open(output_labels.c_str()); }
+
+        for (int y=0 ; y<size; y++)
+        {
+                //Save in char
+                if(data[y]) {labelsfile << y<< " ";}
+        }
+        labelsfile <<",";
+    }
+
+}
+
+void write_labels(cv::Mat lblImg, const std::string& output_labels, bool finalize){
+    if(finalize){
+        lblImg.release();
+    }else{
+        if(!lblsVidWriter.isOpened()){
+            lblsVidWriter.open(output_labels,fourcc,fps, cv::Size(lblImg.cols,lblImg.rows),0);
+        }
+        lblsVidWriter.write(lblImg);
+    }
+}
+void write_labels(unsigned char* data,const int width, const int height, const std::string& output_labels)
+{
+    std::ofstream file;
+    file.open(output_labels.c_str());
+
+    for (int y=0 ; y<height ; y++)
+    {
+        for (int x=0 ; x<width-1 ; x++)
+        {
+            file << (int) data[y*width + x] << " ";
+
+        }
+        file << (int) data[y*width+ (width -1)] << std::endl;
+
+    }
+
+    file.close();
+}
 
 void write_labels(IplImage* input, const std::string& output_labels)
 {
@@ -132,7 +210,9 @@ void write_traces(float* C1, float* C2, float* C3, const std::string& output_lab
     {
         file << (double) C1[y] << " ";
         file << (double) C2[y] << " ";
-        file << (double) C3[y] << std::endl;
+        file << (double) C3[y] << " ";
+        file << (double) SP->get_Xseeds()[y] << " ";
+        file << (double) SP->get_Yseeds()[y] << std::endl;
 
     }
 
@@ -151,7 +231,7 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     int* labels = Super_Pixel->getLabels();
 
     cv::Mat* output_bounds = new cv::Mat(cvSize(width, height), CV_8UC1);
-    const int color = 0xFFFFFFFF;
+    const int color = 0x00FFFFFF;
 
     unsigned char* ubuff = output_bounds->ptr();
     std::fill(ubuff, ubuff + (width*height), 0);
@@ -159,6 +239,8 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     DrawContoursAroundSegments(ubuff, labels, width, height, color);
 
     cv::Mat* pImg = new cv::Mat(cvSize(width, height), CV_8UC3);
+    cv::Mat* lblImg = new cv::Mat(cvSize(width, height), CV_8UC1);
+
     float* sum_rgb = new float[Super_Pixel->getMaxSPNumber()*3];
     int* count_px = new int[Super_Pixel->getMaxSPNumber()];
     std::fill(sum_rgb, sum_rgb+Super_Pixel->getMaxSPNumber()*3, 0.f);
@@ -171,8 +253,9 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
         sum_rgb[ labels[ii] + Super_Pixel->getMaxSPNumber() * 1 ] += img->ptr()[i+1];
         sum_rgb[ labels[ii] + Super_Pixel->getMaxSPNumber() * 2 ] += img->ptr()[i+2];
 
+        //Update label image
+        lblImg->ptr<uchar>()[i/3] = (uchar)(labels[ii]);
     }
-
     float* R = new float[Super_Pixel->getMaxSPNumber()];
     float* G = new float[Super_Pixel->getMaxSPNumber()];
     float* B = new float[Super_Pixel->getMaxSPNumber()];
@@ -307,6 +390,8 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
 #endif
 
         cv::imshow("rgb mean", *pImg);
+        cv::imshow("labels", *lblImg);
+
         cv::waitKey( 1 );
 
     //}
@@ -323,14 +408,20 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     std::ofstream file;
     file.open(output_labels);
    
-     int* parent = Super_Pixel->get_inheritance();
+    int* parent = Super_Pixel->get_inheritance();
 
     for (int y=0; y<Super_Pixel->getActualSPNumber(); y++)
         file << parent[y] << std::endl;
 
     file.close();
 
+    //Save labels to labels.seg file. One file for all frames
+    sprintf(output_labels, "results/%s/contours.seg", output_basename.c_str());
+    write_contours_composite(ubuff,pImg->cols*pImg->rows,output_labels);
+    sprintf(output_labels, "results/%s/labels.avi", output_basename.c_str());
+    write_labels(*lblImg,output_labels);
 #endif
+    delete lblImg;
     delete pImg;
     delete output_bounds;
     delete[] sum_rgb;
@@ -358,8 +449,10 @@ int filter( const struct dirent *name ) {
 
 int main( int argc, char* argv[] )
 {
+    // Register signal and signal handler
+    signal(SIGINT, signal_callback_handler);
     printf(" - Temporal IBIS - \n\n");
-
+    output_basename = std::string(argv[3]);
     int K;
     int compa;
 
@@ -410,7 +503,7 @@ int main( int argc, char* argv[] )
         break;
 
     case S_IFREG:
-        printf("single file processing\n");
+        printf("single file processing: %s\n",output_basename.c_str());
         type=1;
         break;
 
@@ -442,7 +535,7 @@ int main( int argc, char* argv[] )
 
         cv::Mat img;
         int ii=0;
-        std::string output_basename = std::string(argv[3]);
+
 
 #if SAVE_output
         if( type == 1 ) {
@@ -515,6 +608,11 @@ int main( int argc, char* argv[] )
             free(namelist[n]);
 
             printf("\n");
+            //Close contoursfile and labelsfile
+            char output_labels[255] = {0};
+            sprintf(output_labels, "results/%s/contours.seg", output_basename.c_str());
+            write_contours_composite(0,0,output_labels,true);
+            write_labels(img,0,true);
         }
 
         free( image_name );

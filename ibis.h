@@ -38,7 +38,18 @@
 
 // temporal
 #define fixed_background    1
-
+template<typename T=int>
+void printArray(T* numPtr, int x)
+{
+   std::cout<<"[ ";
+   for (int z = 0; z < x; z++)
+   {
+      //std::cout << (numPtr[z]>1e10?-1:(numPtr[z]<1e-10)?0:numPtr[z]) << "  ";
+       if (numPtr[z]>1e10 || numPtr[z]<1e-10) std::cout << -1<<" ";
+       else std::cout << numPtr[z] << "  ";
+   }
+   std::cout<<"]"<<std::endl;
+}
 class IBIS
 {
 

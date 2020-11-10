@@ -6,13 +6,18 @@ if [[ "$#" -lt 1 ]]; then
     echo "If the second argument is not given, this launcher should be placed in CasmeSq/traces directory."
     exit
 fi
-
 casmedbpath=../rawvideo/*
+if [[ "$#" = 1 ]]; then
+	echo "Launching IBIS_Temporal using casmedb=../rawvideo/*."
+	echo "If nothing happens, pass the path to casmedb as the second argument."
+fi
+
 if [[ "$#" = 2 ]]; then
 	#Check optional casmedbpath argument
-	casmedbpath=$2
+	casmedbpath=$2/rawvideo/*
 fi
-for d in casmedbpath; do
+
+for d in $casmedbpath; do
   if [ -d "$d" ]; then
     	#Subject directory
 	echo $d
