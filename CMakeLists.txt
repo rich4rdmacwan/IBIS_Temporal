@@ -10,7 +10,7 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-find_package( OpenCV REQUIRED )
+find_package( OpenCV 3.4.1 REQUIRED )
 find_package( GSL REQUIRED )
 
 set(CMAKE_CXX_STANDARD 14)
@@ -34,7 +34,8 @@ set(headerList
 
 )
 
-set(includeDirList ${includeDirList} $ENV{OPENCV_DIR}/include ./ )
+set(includeDirList ${includeDirList} $ENV{OPENCV_DIR}/include  ./ )
+message(${OpenCV_INCLUDE_DIRS})
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${GSL_INCLUDE_DIRS})
 include_directories(/usr/include)

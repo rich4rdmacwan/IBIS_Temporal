@@ -28,14 +28,15 @@
 #define signal_processing   1
 // Handle to labelsfile. Shall be kept open to write labels for each frame.
 // Shall be closed during destruction
-std::ofstream labelsfile;
+std::ofstream contoursfile, labelsfile;
 std::string output_basename;
 using namespace std;
 //Declaration
 void write_contours_composite(unsigned char* data,int size, const std::string& output_labels, bool finalize=false);
 void write_labels(cv::Mat lblImg, const std::string& output_labels, bool finalize=false);
-
+void write_contours_labels(unsigned char* data,const int* labels, int size,const std::string& output_contours, const std::string& output_labels, bool finalize=false);
 cv::VideoWriter lblsVidWriter;
+std::ofstream *lblsWriter;
 int fourcc = cv::VideoWriter::fourcc('Y','8','0','0');
 
 double fps = 30; //Not going to matter because we're just going to extract the frames
@@ -45,11 +46,12 @@ double fps = 30; //Not going to matter because we're just going to extract the f
 void signal_callback_handler(int signum) {
    cout << "Caught signal " << signum << endl;
    //Close labelsfile
-   char output_labels[255] = {0};
-   sprintf(output_labels, "results/%s/labels.seg", output_basename.c_str());
-   write_contours_composite(0,0,output_labels,true);
-   cv::Mat dummy;
-   write_labels(dummy,0,true);
+   char output_labels[255] = {0}; char output_contours[255] = {0};
+   sprintf(output_contours, "results/%s/contours.seg", output_basename.c_str());
+   //write_contours_composite(NULL,0,output_contours,true);
+   sprintf(output_labels, "results/%s/labels_px.seg", output_basename.c_str());
+   write_contours_labels(NULL,NULL,0,output_contours,output_labels,true);
+
    // Terminate program
    exit(signum);
 }
@@ -129,6 +131,40 @@ void DrawContoursAroundSegments(
     }
 }
 
+
+//Save all the frame contours to a single file.
+//To save disk space (quite a lot, 300MB instead of 2.2G), this writes just the indices of the pixel positions representing the contours
+//Column major format: 640x480 elements separated by spaces, followed by a ',' to separate frames.
+// frame1              ; frame2              ;...;frameN
+// col1' col2' ... col480'; col1' col2' ... col480';...
+// Similarly, the labels are written using a simple coding scheme:
+// <label_1> <n_label_1>, <label_2> <n_label_2>...;<label_1> <n_label_1>, <label_2> <n_label_2>...
+// Comma separated values indicate the number of times a given label repeats. ; separates each frame
+void write_contours_labels(unsigned char* data,const int* labels, int size,const std::string& output_contours, const std::string& output_labels, bool finalize)
+{
+    //This should be called from the destructor, or at the end of all the frames
+    if(finalize){std::cout<<"Closing open files..."<<std::endl; contoursfile.close();labelsfile.close();}
+    else{
+        if(!contoursfile.is_open()){ contoursfile.open(output_contours.c_str()); }
+        if(!labelsfile.is_open()){ labelsfile.open(output_labels.c_str()); }
+
+        for (int y=0 ; y<size; y++)
+        {
+                //Save in char
+                if(data[y]) {contoursfile << y<< " ";}
+                if(y>0 && labels[y]!=labels[y-1]){labelsfile<<labels[y-1]<<" "<<y-1<<",";}
+
+        }
+        contoursfile <<",";
+        //Write the last label and its cumulative index, since the comparison test for the last label
+        //wont generally pass. e.g. label values of 300 300 300 at indices 307198, 307199, 307200.
+        labelsfile<<labels[size-1]<<" "<<(size-1);
+        labelsfile<<";";
+    }
+
+}
+
+
 //Save all the frame contours to a single file.
 //To save disk space, this writes just the indices of the pixel positions representing the contours
 //Column major format: 640x480 elements separated by spaces, followed by a ',' to separate frames.
@@ -137,20 +173,38 @@ void DrawContoursAroundSegments(
 void write_contours_composite(unsigned char* data,int size, const std::string& output_labels, bool finalize)
 {
     //This should be called from the destructor, or at the end of all the frames
-    if(finalize){labelsfile.close();}
+    if(finalize){contoursfile.close();}
     else{
-        if(!labelsfile.is_open()){ labelsfile.open(output_labels.c_str()); }
+        if(!contoursfile.is_open()){ contoursfile.open(output_labels.c_str()); }
 
         for (int y=0 ; y<size; y++)
         {
                 //Save in char
-                if(data[y]) {labelsfile << y<< " ";}
+                if(data[y]) {contoursfile << y<< " ";}
         }
-        labelsfile <<",";
+        contoursfile <<",";
     }
 
 }
 
+// Write all pixel labels to one file, to reduce number of files on disk.
+// Framewise labels are separated by a ',\n'
+void write_labels(const int* labels, int size, const std::string& output_labels, bool finalize){
+    if(finalize){
+        lblsWriter->close();
+    }else{
+        if(!lblsWriter){
+            lblsWriter = new ofstream(output_labels.c_str());
+        }
+        for(int i=0;i<size;i++){
+            (*lblsWriter)<<(int)labels[i]<<" ";
+        }
+        (*lblsWriter)<<","<<std::endl;
+    }
+
+}
+
+//Deprecated: Only works if N° of SP < 255. See the overloaded function that takes an int* as input
 void write_labels(cv::Mat lblImg, const std::string& output_labels, bool finalize){
     if(finalize){
         lblImg.release();
@@ -200,11 +254,13 @@ void write_labels(IplImage* input, const std::string& output_labels)
     file.close();
 }
 
-void write_traces(float* C1, float* C2, float* C3, const std::string& output_labels, IBIS* SP)
+void write_traces(float* C1, float* C2, float* C3, const std::string& output_labels, IBIS* SP, Signal_processing* Signal)
 {
     std::ofstream file;
     file.open(output_labels.c_str());
     int max_sp = SP->getMaxSPNumber();
+    const int* labels = SP->getLabels();
+    const float* SNR = Signal->get_SNR();
 
     for (int y=0 ; y<SP->getActualSPNumber() ; y++)
     {
@@ -212,7 +268,8 @@ void write_traces(float* C1, float* C2, float* C3, const std::string& output_lab
         file << (double) C2[y] << " ";
         file << (double) C3[y] << " ";
         file << (double) SP->get_Xseeds()[y] << " ";
-        file << (double) SP->get_Yseeds()[y] << std::endl;
+        file << (double) SP->get_Yseeds()[y] << " ";
+        file << (double) SNR[labels[y]]<<std::endl;
 
     }
 
@@ -239,7 +296,7 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     DrawContoursAroundSegments(ubuff, labels, width, height, color);
 
     cv::Mat* pImg = new cv::Mat(cvSize(width, height), CV_8UC3);
-    cv::Mat* lblImg = new cv::Mat(cvSize(width, height), CV_8UC1);
+    cv::Mat* lblImg = new cv::Mat(cvSize(width, height), CV_16UC1);
 
     float* sum_rgb = new float[Super_Pixel->getMaxSPNumber()*3];
     int* count_px = new int[Super_Pixel->getMaxSPNumber()];
@@ -253,8 +310,6 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
         sum_rgb[ labels[ii] + Super_Pixel->getMaxSPNumber() * 1 ] += img->ptr()[i+1];
         sum_rgb[ labels[ii] + Super_Pixel->getMaxSPNumber() * 2 ] += img->ptr()[i+2];
 
-        //Update label image
-        lblImg->ptr<uchar>()[i/3] = (uchar)(labels[ii]);
     }
     float* R = new float[Super_Pixel->getMaxSPNumber()];
     float* G = new float[Super_Pixel->getMaxSPNumber()];
@@ -390,7 +445,7 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
 #endif
 
         cv::imshow("rgb mean", *pImg);
-        cv::imshow("labels", *lblImg);
+        //cv::imshow("labels", *lblImg);
 
         cv::waitKey( 1 );
 
@@ -398,10 +453,10 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
 #endif
 
 #if SAVE_output
-    char output_labels[255] = {0};
+    char output_labels[255] = {0}; char output_contours[255] = {0};
     sprintf(output_labels, "results/%s/traces_%04i.seg", output_basename.c_str(), frame_index);
 
-    write_traces( R, G, B, output_labels, Super_Pixel );
+    write_traces( R, G, B, output_labels, Super_Pixel, Signal );
 
     sprintf(output_labels, "results/%s/parent_%04i.seg", output_basename.c_str(), frame_index);
 
@@ -416,10 +471,10 @@ void execute_IBIS( int K, int compa, IBIS* Super_Pixel, Signal_processing* Signa
     file.close();
 
     //Save labels to labels.seg file. One file for all frames
-    sprintf(output_labels, "results/%s/contours.seg", output_basename.c_str());
-    write_contours_composite(ubuff,pImg->cols*pImg->rows,output_labels);
-    sprintf(output_labels, "results/%s/labels.avi", output_basename.c_str());
-    write_labels(*lblImg,output_labels);
+    sprintf(output_contours, "results/%s/contours.seg", output_basename.c_str());
+    sprintf(output_labels, "results/%s/labels_px.seg", output_basename.c_str());
+    write_contours_labels(ubuff, labels, pImg->cols*pImg->rows,output_contours, output_labels);
+    //write_labels(labels,pImg->cols*pImg->rows,output_labels);
 #endif
     delete lblImg;
     delete pImg;
@@ -609,10 +664,12 @@ int main( int argc, char* argv[] )
 
             printf("\n");
             //Close contoursfile and labelsfile
-            char output_labels[255] = {0};
-            sprintf(output_labels, "results/%s/contours.seg", output_basename.c_str());
-            write_contours_composite(0,0,output_labels,true);
-            write_labels(img,0,true);
+            char output_labels[255] = {0}; char output_contours[255] = {0};
+            sprintf(output_contours, "results/%s/contours.seg", output_basename.c_str());
+            //write_contours_composite(NULL,0,output_contours,true);
+            sprintf(output_labels, "results/%s/labels_px.seg", output_basename.c_str());
+            write_contours_labels(NULL, NULL,0 ,output_contours, output_labels,true);
+
         }
 
         free( image_name );
