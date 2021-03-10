@@ -132,14 +132,7 @@ void DrawContoursAroundSegments(
 }
 
 
-//Save all the frame contours to a single file.
-//To save disk space (quite a lot, 300MB instead of 2.2G), this writes just the indices of the pixel positions representing the contours
-//Column major format: 640x480 elements separated by spaces, followed by a ',' to separate frames.
-// frame1              ; frame2              ;...;frameN
-// col1' col2' ... col480'; col1' col2' ... col480';...
-// Similarly, the labels are written using a simple coding scheme:
-// <label_1> <n_label_1>, <label_2> <n_label_2>...;<label_1> <n_label_1>, <label_2> <n_label_2>...
-// Comma separated values indicate the number of times a given label repeats. ; separates each frame
+//Save contours and labels in separate .seg files
 void write_contours_labels(unsigned char* data,const int* labels, int size,const std::string& output_contours, const std::string& output_labels, bool finalize)
 {
     //This should be called from the destructor, or at the end of all the frames
