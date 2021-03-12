@@ -90,7 +90,7 @@ while db.res
     
     data.nWindows = numel(halfWin:data.stepSize:traceSize-halfWin);
     HR_PPG = zeros(1,data.nWindows);
-    
+    data.roisize=[32,32]; %Size of block
     %data.maxLags = round(1.5*Fs);
     if db.idx==1 %Casmesq
             data.vidDuration = double(traceSize/data.Fs);
@@ -296,7 +296,6 @@ if ind==1 && j==1
     %Init data structures
     data.H = size(data.frame,1);
     data.W = size(data.frame,2);
-    data.roisize=[64,64];
     data.fnroimean = @(block_struct) nanmean(nanmean(block_struct.data));
     data.fnroiexpand = @(block_struct) repmat(block_struct.data,data.roisize(1),data.roisize(2));
     
@@ -413,8 +412,7 @@ if j==1
     data.W = size(data.frame,2);
     %OUT = zeros(data.H,data.W,3,data.winLength);
     %Divide face into ROIs
-    %data.roisize=[16,16];
-    data.roisize=[16,16];
+    %data.roisize=[16,16];    
     data.fnroimean = @(block_struct) nanmean(nanmean(block_struct.data));
     data.fnroiexpand = @(block_struct) repmat(block_struct.data,data.roisize(1),data.roisize(2));
     
