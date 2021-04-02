@@ -5,8 +5,20 @@ function [db] = getNextVid(db)
 % db is a structure. db.res contains true if there is a next video
 % db.idx = 1 (CasmeSq), 2(FixedData) or 3 (MMSE);
 % db.vidToProcess can be used to limit processing to single videos
+% db.processUntilEnd flag can be used to process videos starting from a
+% given video until the end
 %Populate all the video paths in a list so that iteration is easy
 i=1;
+% Set processUntilEnd field if it does not exist
+if ~isfield(db,'processUntilEnd')
+    db.processUntilEnd = false;
+end
+% Flag to continue processing videos once the selected video is found
+% Used internally, shall have no effect if db.processUntilEnd = false.
+if ~isfield(db,'continueProcessingRemaining')
+    db.continueProcessingRemaining = false; 
+end
+
 
 switch db.idx
     case 1 %CasmeSq
@@ -40,7 +52,7 @@ switch db.idx
         end
         
         %Skip videos upto vidToProcess
-        while strcmp(db.vidToProcess,db.videonames{db.vidIdx})~=1
+        while ~isempty(db.vidToProcess) && strcmp(db.vidToProcess,db.videonames{db.vidIdx})~=1
             db.vidIdx = db.vidIdx + 1;
             if db.vidEndIdx < db.vidIdx
                 db.vidEndIdx = db.vidIdx;
@@ -62,8 +74,8 @@ switch db.idx
         if ~isfield(db,'videos')
             disp('Populating FixedData video list');
             fixedDataFolder = '//mnt/nvmedisk/fixedData20122017/';
-            %db.vidToProcess = '2017_12_20-15_35_40';
-            db.vidToProcess = []; %Processs all videos
+            db.vidToProcess = '2017_12_20-16_05_22';
+           % db.vidToProcess = []; %Processs all videos
             folders = dir(fixedDataFolder);
             %ignoreList = {'2017_12_20-14_55_23', '2017_12_20-15_02_30','2017_12_20-15_06_34'};
             idx = 1;
@@ -86,8 +98,30 @@ switch db.idx
         end
         
         %Skip videos upto vidToProcess
-        while ~isempty(db.vidToProcess) && db.vidIdx<=numel(db.videos) && strcmp(db.vidToProcess,db.videonames{db.vidIdx})~=1
-            db.vidIdx = db.vidIdx + 1;
+        while ~isempty(db.vidToProcess) && db.vidIdx<=numel(db.videos) 
+            if strcmp(db.vidToProcess,db.videonames{db.vidIdx})~=1
+                    if db.processUntilEnd
+                        if db.continueProcessingRemaining
+                            %Advance by one index and break to process the
+                            %next vid
+                            db.vidIdx = db.vidIdx + 1;
+                            break;
+                        end
+                    else
+                        %Just advance the counter till the end if 
+                        %db.processUntilEnd is false
+                        db.vidIdx = db.vidIdx + 1;
+                    end
+                    
+            else
+                    %Found the selected video, 
+                    db.continueProcessingRemaining = true;
+                    db.vidIdx = db.vidIdx + 1;
+                    break;
+            end
+                
+            
+            
 %             if db.vidEndIdx < db.vidIdx
 %                 db.vidEndIdx = db.vidIdx;
 %             end
